@@ -131,8 +131,15 @@ app.post('/send', async (req, res) => {
 // Get contacts
 app.get('/contacts', async (req, res) => {
   const { phoneId, apiKey: providedKey } = req.query;
-  if (providedKey !== apiKey) return res.status(403).json({ error: 'Invalid API key' });
-  if (!phoneId) return res.status(400).json({ error: 'phoneId required' });
+
+  // ✅ use process.env.API_KEY
+  if (providedKey !== process.env.API_KEY) {
+    return res.status(403).json({ error: 'Invalid API key' });
+  }
+
+  if (!phoneId) {
+    return res.status(400).json({ error: 'phoneId required' });
+  }
 
   try {
     const messages = await Message.find({ phoneNumberId: phoneId }).sort({ timestamp: -1 });
@@ -141,10 +148,22 @@ app.get('/contacts', async (req, res) => {
     messages.forEach(msg => {
       const number = msg.direction === 'incoming' ? msg.from : msg.to;
       if (!number) return;
-      const contact = contactsMap.get(number) || { number, name: null, lastMessage: '', lastMessageTime: null, unreadCount: 0 };
+
+      const contact = contactsMap.get(number) || {
+        number,
+        name: null,
+        lastMessage: '',
+        lastMessageTime: null,
+        unreadCount: 0
+      };
+
       contact.lastMessage = msg.message;
       contact.lastMessageTime = msg.timestamp;
-      if (msg.direction === 'incoming') contact.unreadCount++;
+
+      if (msg.direction === 'incoming') {
+        contact.unreadCount++;
+      }
+
       contactsMap.set(number, contact);
     });
 
@@ -154,5 +173,6 @@ app.get('/contacts', async (req, res) => {
     res.status(500).json({ error: 'Fetch contacts error' });
   }
 });
+
 
 app.listen(port, () => console.log(`\nListening on port ${port}\n`));
