@@ -82,11 +82,14 @@ app.post('/webhook', async (req, res) => {
 });
 
 app.get('/messages', async (req, res) => {
-  const { phoneId, apiKey: providedKey } = req.query;
+  const { phoneId, contactNumber, apiKey: providedKey } = req.query;
   if (providedKey !== apiKey) return res.status(403).json({ error: 'Invalid API key' });
-  if (!phoneId) return res.status(400).json({ error: 'phoneId required' });
+  if (!phoneId || !contactNumber) return res.status(400).json({ error: 'phoneId and contactNumber required' });
   try {
-    const messages = await Message.find({ phoneNumberId: phoneId }).sort({ timestamp: -1 }).limit(100);
+    const messages = await Message.find({
+      phoneNumberId: phoneId,
+      $or: [{ from: contactNumber }, { to: contactNumber }]
+    }).sort({ timestamp: -1 }).limit(100);
     res.json({ messages });
   } catch (error) {
     console.error('Fetch error:', error.message);
@@ -133,6 +136,42 @@ app.post('/send', async (req, res) => {
   } catch (error) {
     console.error('Send error:', error.message);
     res.status(500).json({ error: 'Send failed' });
+  }
+});
+
+app.get('/contacts', async (req, res) => {
+  const { phoneId, apiKey: providedKey } = req.query;
+  if (providedKey !== apiKey) return res.status(403).json({ error: 'Invalid API key' });
+  if (!phoneId) return res.status(400).json({ error: 'phoneId required' });
+  try {
+    const messages = await Message.find({ phoneNumberId: phoneId })
+      .sort({ timestamp: -1 });
+    
+    const contactsMap = new Map();
+    messages.forEach(msg => {
+      const number = msg.direction === 'incoming' ? msg.from : msg.to;
+      if (!number) return;
+      if (!contactsMap.has(number)) {
+        contactsMap.set(number, {
+          number,
+          name: null, // You can integrate Meta's contact name API if needed
+          lastMessage: msg.message,
+          lastMessageTime: msg.timestamp,
+          unreadCount: msg.direction === 'incoming' ? 1 : 0
+        });
+      } else {
+        const contact = contactsMap.get(number);
+        contact.lastMessage = msg.message;
+        contact.lastMessageTime = msg.timestamp;
+        if (msg.direction === 'incoming') contact.unreadCount++;
+      }
+    });
+    
+    const contacts = Array.from(contactsMap.values());
+    res.json({ contacts });
+  } catch (error) {
+    console.error('Fetch contacts error:', error.message);
+    res.status(500).json({ error: 'Fetch contacts error' });
   }
 });
 
