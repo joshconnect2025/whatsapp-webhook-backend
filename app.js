@@ -8,9 +8,9 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: 'https://edu9.in' }));
 
-const express = require('express');
-const mongoose = require('mongoose');
-const fetch = require('node-fetch');
+// const express = require('express');
+// const mongoose = require('mongoose');
+// const fetch = require('node-fetch');
 
 // const app = express();
 // app.use(express.json());
