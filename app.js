@@ -1,194 +1,180 @@
-import express from 'express';
-import mongoose from 'mongoose';
-import fetch from 'node-fetch';
-import cors from 'cors';
-import 'dotenv/config';
+// app.js
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+const axios = require("axios");
+const bodyParser = require("body-parser");
+const cors = require("cors");
 
 const app = express();
-app.use(express.json());
-app.use(cors({
-  origin: "https://edu9.in", 
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
-}));
+const PORT = process.env.PORT || 10000;
 
-// const express = require('express');
-// const mongoose = require('mongoose');
-// const fetch = require('node-fetch');
+// ====== ENV CONFIG ======
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "vibecode123";
+const SYSTEM_USER_TOKEN = process.env.SYSTEM_USER_TOKEN; // Permanent Meta Token
+const API_KEY = process.env.API_KEY || "edu9WhatsApp123";
+const MONGO_URI = process.env.MONGO_URI;
 
-// const app = express();
-// app.use(express.json());
+// ====== MIDDLEWARE ======
+app.use(bodyParser.json());
+app.use(cors());
 
-const port = process.env.PORT || 3000;
-const verifyToken = process.env.VERIFY_TOKEN || 'default-token';
-const mongoUri = process.env.MONGO_URI;
-const apiKey = process.env.API_KEY || 'default-key';
-const metaAccessToken = process.env.META_ACCESS_TOKEN;
+// ====== DB CONNECT ======
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch(err => console.error("❌ MongoDB error:", err));
 
-if (!mongoUri) {
-  console.error('MONGO_URI is not defined');
-  process.exit(1);
-}
-if (!metaAccessToken) {
-  console.error('META_ACCESS_TOKEN is not defined');
-  process.exit(1);
-}
-mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err.message);
-    process.exit(1);
-  });
-
+// ====== SCHEMA ======
 const messageSchema = new mongoose.Schema({
-  phoneNumberId: { type: String, required: true },
+  phoneId: String,
   from: String,
   to: String,
-  message: String,
-  type: String,
-  direction: String, // "incoming" or "outgoing"
+  text: String,
+  direction: String, // incoming / outgoing
   timestamp: { type: Date, default: Date.now },
-  metadata: mongoose.Schema.Types.Mixed
+  status: { type: String, default: "unread" }
 });
-const Message = mongoose.model('Message', messageSchema);
+const Message = mongoose.model("Message", messageSchema);
 
-app.get('/webhook', (req, res) => {
-  const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
-  if (mode === 'subscribe' && token === verifyToken) {
-    console.log('WEBHOOK VERIFIED');
+// ====== ROOT ROUTE ======
+app.get("/", (req, res) => {
+  res.send("✅ WhatsApp Backend is running!");
+});
+
+// ====== WEBHOOK VERIFY (GET) ======
+app.get("/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode && token && mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("✅ Webhook verified!");
     res.status(200).send(challenge);
   } else {
-    console.log('Webhook verification failed');
-    res.status(403).end();
+    res.sendStatus(403);
   }
 });
 
-app.post('/webhook', async (req, res) => {
+// ====== WEBHOOK RECEIVE (POST) ======
+app.post("/webhook", async (req, res) => {
   try {
-    const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    console.log(`\nWebhook received ${timestamp}\n`);
-    console.log(JSON.stringify(req.body, null, 2));
-    const entry = req.body.entry && req.body.entry[0];
-    if (entry && entry.changes && entry.changes[0]) {
-      const change = entry.changes[0];
-      const phoneNumberId = change.value.metadata.phone_number_id;
-      const messages = change.value.messages;
+    const apiKey = req.query.apiKey;
+    if (apiKey !== API_KEY) return res.sendStatus(403);
+
+    const body = req.body;
+    if (body.object) {
+      const entry = body.entry?.[0];
+      const changes = entry?.changes?.[0];
+      const value = changes?.value;
+      const messages = value?.messages;
+
       if (messages && messages.length > 0) {
-        for (const msg of messages) {
-          const newMessage = new Message({
-            phoneNumberId: phoneNumberId,
-            from: msg.from,
-            message: msg.text ? msg.text.body : (msg.type === 'image' ? '[Image]' : '[Other Media]'),
-            type: msg.type,
-            direction: 'incoming',
-            metadata: { id: msg.id, timestamp: msg.timestamp }
-          });
-          await newMessage.save();
-          console.log(`Stored incoming message from ${msg.from} on phone ${phoneNumberId}`);
-        }
-      }
-    }
-    res.status(200).end();
-  } catch (error) {
-    console.error('Error storing message:', error.message);
-    res.status(500).end();
-  }
-});
+        const msg = messages[0];
+        const from = msg.from;
+        const text = msg.text?.body || "";
 
-app.get('/messages', async (req, res) => {
-  const { phoneId, contactNumber, apiKey: providedKey } = req.query;
-  if (providedKey !== apiKey) return res.status(403).json({ error: 'Invalid API key' });
-  if (!phoneId || !contactNumber) return res.status(400).json({ error: 'phoneId and contactNumber required' });
-  try {
-    const messages = await Message.find({
-      phoneNumberId: phoneId,
-      $or: [{ from: contactNumber }, { to: contactNumber }]
-    }).sort({ timestamp: -1 }).limit(100);
-    res.json({ messages });
-  } catch (error) {
-    console.error('Fetch error:', error.message);
-    res.status(500).json({ error: 'Fetch error' });
-  }
-});
-
-app.post('/send', async (req, res) => {
-  const { apiKey: providedKey } = req.query;
-  const { phoneNumberId, to, message } = req.body;
-  if (providedKey !== apiKey) return res.status(403).json({ error: 'Invalid API key' });
-  if (!phoneNumberId || !to || !message) return res.status(400).json({ error: 'Missing phoneNumberId, to, or message' });
-  try {
-    const metaUrl = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
-    const body = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: to,
-      type: 'text',
-      text: { body: message }
-    };
-    const response = await fetch(metaUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${metaAccessToken}` },
-      body: JSON.stringify(body)
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Meta send error: ${JSON.stringify(errorData)}`);
-    }
-    const data = await response.json();
-    const newMessage = new Message({
-      phoneNumberId,
-      from: 'me',
-      to,
-      message,
-      type: 'text',
-      direction: 'outgoing',
-      metadata: { metaId: data.messages[0].id }
-    });
-    await newMessage.save();
-    console.log(`Sent and stored message to ${to} from phone ${phoneNumberId}`);
-    res.json({ success: true, metaData: data });
-  } catch (error) {
-    console.error('Send error:', error.message);
-    res.status(500).json({ error: 'Send failed' });
-  }
-});
-
-app.get('/contacts', async (req, res) => {
-  const { phoneId, apiKey: providedKey } = req.query;
-  if (providedKey !== apiKey) return res.status(403).json({ error: 'Invalid API key' });
-  if (!phoneId) return res.status(400).json({ error: 'phoneId required' });
-  try {
-    const messages = await Message.find({ phoneNumberId: phoneId })
-      .sort({ timestamp: -1 });
-    
-    const contactsMap = new Map();
-    messages.forEach(msg => {
-      const number = msg.direction === 'incoming' ? msg.from : msg.to;
-      if (!number) return;
-      if (!contactsMap.has(number)) {
-        contactsMap.set(number, {
-          number,
-          name: null, // You can integrate Meta's contact name API if needed
-          lastMessage: msg.message,
-          lastMessageTime: msg.timestamp,
-          unreadCount: msg.direction === 'incoming' ? 1 : 0
+        await Message.create({
+          phoneId: value.metadata.phone_number_id,
+          from,
+          text,
+          direction: "incoming",
+          status: "unread"
         });
-      } else {
-        const contact = contactsMap.get(number);
-        contact.lastMessage = msg.message;
-        contact.lastMessageTime = msg.timestamp;
-        if (msg.direction === 'incoming') contact.unreadCount++;
+
+        console.log("📥 Incoming:", from, text);
       }
-    });
-    
-    const contacts = Array.from(contactsMap.values());
-    res.json({ contacts });
-  } catch (error) {
-    console.error('Fetch contacts error:', error.message);
-    res.status(500).json({ error: 'Fetch contacts error' });
+    }
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("Webhook error:", err);
+    res.sendStatus(500);
   }
 });
 
-app.listen(port, () => {
-  console.log(`\nListening on port ${port}\n`);
+// ====== SEND MESSAGE ======
+app.post("/send", async (req, res) => {
+  try {
+    const apiKey = req.query.apiKey;
+    if (apiKey !== API_KEY) return res.sendStatus(403);
+
+    const { phoneId, to, text } = req.body;
+    if (!phoneId || !to || !text) return res.status(400).json({ error: "Missing fields" });
+
+    const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
+
+    await axios.post(
+      url,
+      {
+        messaging_product: "whatsapp",
+        to,
+        type: "text",
+        text: { body: text }
+      },
+      {
+        headers: { Authorization: `Bearer ${SYSTEM_USER_TOKEN}` }
+      }
+    );
+
+    await Message.create({
+      phoneId,
+      to,
+      text,
+      direction: "outgoing"
+    });
+
+    console.log("📤 Outgoing:", to, text);
+    res.json({ success: true, message: "Message sent" });
+  } catch (err) {
+    console.error("Send error:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+// GET /messages?phoneId=&number=&apiKey=
+app.get("/messages", async (req, res) => {
+  try {
+    const { phoneId, number, apiKey } = req.query;
+    if (apiKey !== API_KEY) return res.sendStatus(403);
+    const messages = await Message.find({ phoneId, from: number }).sort({ timestamp: 1 });
+    res.json({ messages });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+
+// ====== CONTACTS API ======
+app.get("/contacts", async (req, res) => {
+  try {
+    const apiKey = req.query.apiKey;
+    const phoneId = req.query.phoneId;
+    if (apiKey !== API_KEY) return res.sendStatus(403);
+
+    const pipeline = [
+      { $match: { phoneId } },
+      { $sort: { timestamp: -1 } },
+      {
+        $group: {
+          _id: "$from",
+          lastMessage: { $first: "$text" },
+          lastMessageTime: { $first: "$timestamp" },
+          unreadCount: {
+            $sum: { $cond: [{ $eq: ["$status", "unread"] }, 1, 0] }
+          }
+        }
+      },
+      { $project: { _id: 0, number: "$_id", lastMessage: 1, lastMessageTime: 1, unreadCount: 1 } }
+    ];
+
+    const contacts = await Message.aggregate(pipeline);
+    res.json({ contacts });
+  } catch (err) {
+    console.error("Contacts error:", err);
+    res.status(500).json({ error: "Failed to fetch contacts" });
+  }
+});
+
+// ====== START SERVER ======
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
