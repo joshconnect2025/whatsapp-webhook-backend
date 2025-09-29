@@ -6,7 +6,7 @@ import 'dotenv/config';
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: 'https://edu9.in' }));
+app.use(cors({ origin: 'https://edu9.in/WhatsApp' }));
 
 // const express = require('express');
 // const mongoose = require('mongoose');
