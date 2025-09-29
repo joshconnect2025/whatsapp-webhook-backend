@@ -3,8 +3,11 @@ const mongoose = require('mongoose');
 const fetch = require('node-fetch');
 
 const app = express();
+const cors = require("cors");
 app.use(express.json());
+// app.use(cors());
 
+app.use(cors({ origin: 'https://edu9.in' }));
 const port = process.env.PORT || 3000;
 const verifyToken = process.env.VERIFY_TOKEN || 'default-token';
 const mongoUri = process.env.MONGO_URI;
@@ -38,7 +41,7 @@ const messageSchema = new mongoose.Schema({
 });
 const Message = mongoose.model('Message', messageSchema);
 
-app.get('/webhook', (req, res) => {
+app.get('/', (req, res) => {
   const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
   if (mode === 'subscribe' && token === verifyToken) {
     console.log('WEBHOOK VERIFIED');
@@ -49,7 +52,7 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-app.post('/webhook', async (req, res) => {
+app.post('/', async (req, res) => {
   try {
     const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
     console.log(`\nWebhook received ${timestamp}\n`);
