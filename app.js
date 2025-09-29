@@ -35,7 +35,7 @@ const messageSchema = new mongoose.Schema({
 const Message = mongoose.model('Message', messageSchema);
 
 // Webhook verification
-app.get('/', (req, res) => {
+app.get('/webhook', (req, res) => {
   const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
   if (mode === 'subscribe' && token === verifyToken) {
     console.log('WEBHOOK VERIFIED');
@@ -46,7 +46,7 @@ app.get('/', (req, res) => {
 });
 
 // Incoming webhook messages
-app.post('/', async (req, res) => {
+app.post('/webhook', async (req, res) => {
   try {
     const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
     console.log(`\nWebhook received ${timestamp}\n`, JSON.stringify(req.body, null, 2));
