@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import fetch from 'node-fetch';
 import cors from 'cors';
+import 'dotenv/config';
 
 const app = express();
 app.use(express.json());
