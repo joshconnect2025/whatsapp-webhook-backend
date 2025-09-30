@@ -3,8 +3,9 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import axios from "axios";
 
-dotenv.config(); 
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -16,11 +17,11 @@ const API_KEY = process.env.API_KEY || "edu9WhatsApp123";
 const MONGO_URI = process.env.MONGO_URI;
 
 // ====== MIDDLEWARE ======
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(cors());
 
 // ====== DB CONNECT ======
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(MONGO_URI)
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch(err => console.error("❌ MongoDB error:", err));
 
@@ -130,7 +131,7 @@ app.post("/send", async (req, res) => {
   }
 });
 
-// GET /messages?phoneId=&number=&apiKey=
+// ====== GET MESSAGES ======
 app.get("/messages", async (req, res) => {
   try {
     const { phoneId, number, apiKey } = req.query;
@@ -141,7 +142,6 @@ app.get("/messages", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
-
 
 // ====== CONTACTS API ======
 app.get("/contacts", async (req, res) => {
