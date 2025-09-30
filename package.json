@@ -1,16 +1,15 @@
 {
-  "name": "whatsapp-webhook",
+  "name": "whatsapp-backend",
   "version": "1.0.0",
-  "type": "module",
   "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
+    "dotenv": "^16.4.1",
     "express": "^4.18.2",
     "mongoose": "^7.5.0",
     "node-fetch": "^3.3.2"
-  },
-  "scripts": {
-    "start": "node app.js"
   }
 }
