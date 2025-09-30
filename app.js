@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 10000;
 // ====== ENV CONFIG ======
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "vibecode123";
 const SYSTEM_USER_TOKEN = process.env.SYSTEM_USER_TOKEN; // Permanent Meta Token
-const API_KEY = process.env.API_KEY || "edu9WhatsApp123";
+const API_KEY = decodeURIComponent(process.env.API_KEY) || "edu9WhatsApp@API123";
 const MONGO_URI = process.env.MONGO_URI;
 
 // ====== MIDDLEWARE ======
@@ -59,7 +59,7 @@ app.get("/webhook", (req, res) => {
 // ====== WEBHOOK RECEIVE (POST) ======
 app.post("/webhook", async (req, res) => {
   try {
-    const apiKey = req.query.apiKey;
+    const apiKey = decodeURIComponent(req.query.apiKey);
     if (apiKey !== API_KEY) return res.sendStatus(403);
 
     const body = req.body;
@@ -95,7 +95,7 @@ app.post("/webhook", async (req, res) => {
 // ====== SEND MESSAGE ======
 app.post("/send", async (req, res) => {
   try {
-    const apiKey = req.query.apiKey;
+    const apiKey = decodeURIComponent(req.query.apiKey);
     if (apiKey !== API_KEY) return res.sendStatus(403);
 
     const { phoneId, to, text } = req.body;
@@ -146,7 +146,7 @@ app.get("/messages", async (req, res) => {
 // ====== CONTACTS API ======
 app.get("/contacts", async (req, res) => {
   try {
-    const apiKey = req.query.apiKey;
+    const apiKey = decodeURIComponent(req.query.apiKey);
     const phoneId = req.query.phoneId;
     if (apiKey !== API_KEY) return res.sendStatus(403);
 
